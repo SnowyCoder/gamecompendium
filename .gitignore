@@ -1,0 +1,13 @@
+# Project specific
+indexes/
+config.toml
+
+# Python-specific
+__pycache__/
+env/
+venv/
+
+# IDEs (please make the project IDE-specific)
+.idea/
+.vscode/
+
