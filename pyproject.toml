@@ -2,7 +2,7 @@
 name = "gamecompendium"
 version = "0.1.0"
 description = ""
-authors = ["Zelioli Vittorio <vittoriozelioli@gmail.com", "Rossi Lorenzo <snowycoder@gmail.com>"]
+authors = ["Zelioli Vittorio <vittoriozelioli@gmail.com>", "Rossi Lorenzo <snowycoder@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
