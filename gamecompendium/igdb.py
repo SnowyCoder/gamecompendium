@@ -13,8 +13,11 @@ from whoosh.index import Index
 from whoosh.qparser import MultifieldParser
 
 from config import config
+from analyzers import keep_numbers_analyzer
 
 STORAGE_NAME = 'igdb'
+# Downloads less games (faster to index but has only 10% of the games, used for testing)
+ONLY_KNOWN_GAMES = not config['download_full']
 
 # https://api-docs.igdb.com/#rate-limits
 REQUESTS_PER_SECOND = 4
@@ -36,7 +39,7 @@ class IgdmGameExtract:
 
 schema = Schema(
     id=fields.ID(stored=True, unique=True),
-    name=fields.TEXT(stored=True),
+    name=fields.TEXT(stored=True, analyzer=keep_numbers_analyzer()),
     storyline=fields.TEXT(stored=True),
     summary=fields.TEXT(stored=True),
     genres=fields.KEYWORD(stored=True),
@@ -145,10 +148,13 @@ async def soft_log_exceptions(wrapped: Awaitable[T]) -> T:
 
 
 async def extract_games(queue: asyncio.Queue[IgdmGameExtract], count: Callable[[int], None]):
+    add_filter = 'where total_rating_count > 5;' if ONLY_KNOWN_GAMES else ''
+
     async def load_games(offset: int):
         QUERY = f'fields name, storyline, summary, genres.name, platforms.name, involved_companies.company.name, '\
                 f'involved_companies.developer, release_dates.date; limit {MAX_LIMIT};'
-        games = await limiter.execute(load_json(session, 'games', QUERY + f'offset {offset};'))  # type: List[Dict]
+        real_query = QUERY + f'offset {offset};' + add_filter
+        games = await limiter.execute(load_json(session, 'games', real_query))  # type: List[Dict]
 
         for game in games:
 
@@ -175,7 +181,7 @@ async def extract_games(queue: asyncio.Queue[IgdmGameExtract], count: Callable[[
             await queue.put(data)
 
     async with aiohttp.ClientSession() as session, RateLimiter(REQUESTS_PER_SECOND, MAX_OPEN_QUERIES) as limiter:
-        games_count = (await limiter.execute(load_json(session, 'games/count', 'fields *;')))['count']
+        games_count = (await limiter.execute(load_json(session, 'games/count', 'fields *;' + add_filter)))['count']
         count(games_count)
 
         await asyncio.gather(*[
