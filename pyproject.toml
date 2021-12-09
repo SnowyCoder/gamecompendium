@@ -8,9 +8,9 @@ authors = ["Zelioli Vittorio <vittoriozelioli@gmail.com>", "Rossi Lorenzo <snowy
 python = "^3.9"
 Whoosh = "^2.7.4"
 requests = "^2.26.0"
-colorama = "^0.4.4"
 aiohttp = "^3.8.1"
 toml = "^0.10.2"
+tqdm = "^4.62.3"
 
 [tool.poetry.dev-dependencies]
 

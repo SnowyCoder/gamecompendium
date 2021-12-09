@@ -1,5 +1,7 @@
 # Project specific
-indexes/
+/**/indexes/
+/**/dumps/
+
 config.toml
 
 # Python-specific

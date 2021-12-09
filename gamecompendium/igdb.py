@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import json
 from dataclasses import dataclass
-from typing import Awaitable, TypeVar, List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable
 
 import aiohttp
 import requests
@@ -12,8 +12,10 @@ from whoosh.filedb.filestore import Storage
 from whoosh.index import Index
 from whoosh.qparser import MultifieldParser
 
+from async_utils import soft_log_exceptions
 from config import config
 from analyzers import keep_numbers_analyzer
+from rate_limiter import RateLimiter
 
 STORAGE_NAME = 'igdb'
 # Downloads less games (faster to index but has only 10% of the games, used for testing)
@@ -77,58 +79,6 @@ class Access:
         }
 
 
-T = TypeVar('T')
-
-
-class RateLimiter:
-    def __init__(self, tasks_per_seconds, max_tasks_at_once):
-        self._tasks_per_second = tasks_per_seconds
-        self._queue = asyncio.Queue()
-        self._rate_limited_queue = asyncio.Queue()
-        self._consumers = [asyncio.create_task(self._consumer()) for _ in range(max_tasks_at_once)]
-        self._producer_task = asyncio.create_task(self._producer())
-
-    async def _producer(self):
-        while True:
-            x = await self._queue.get()
-            await self._rate_limited_queue.put(x)
-            await asyncio.sleep(1 / self._tasks_per_second)
-
-            self._queue.task_done()
-
-    async def _consumer(self):
-        while True:
-            x = await self._rate_limited_queue.get()
-            await x
-            self._rate_limited_queue.task_done()
-
-    async def execute(self, x: Awaitable[T]) -> T:
-        future = asyncio.Future()
-
-        async def wrapper():
-            try:
-                future.set_result(await x)
-            except Exception as e:
-                future.set_exception(e)
-
-        await self._queue.put(wrapper())
-        return await future
-
-    async def stop(self):
-        await self._queue.join()
-        self._producer_task.cancel()
-        await self._rate_limited_queue.join()
-
-        for c in self._consumers:
-            c.cancel()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.stop()
-
-
 twitch_config = config['twitch']
 access = Access(twitch_config['client_id'], twitch_config['client_secret'])
 
@@ -138,13 +88,6 @@ async def load_json(session: aiohttp.ClientSession, url: str, data: str):
         if not 200 <= response.status < 300:
             raise Exception(await response.read())
         return json.loads(await response.read())
-
-
-async def soft_log_exceptions(wrapped: Awaitable[T]) -> T:
-    try:
-        return await wrapped
-    except Exception as e:
-        print(f"Oops, exception occurred!\n{e}")
 
 
 async def extract_games(queue: asyncio.Queue[IgdmGameExtract], count: Callable[[int], None]):
