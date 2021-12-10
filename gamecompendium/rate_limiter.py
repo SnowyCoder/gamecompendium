@@ -1,5 +1,5 @@
 import asyncio
-from typing import TypeVar, Awaitable
+from typing import TypeVar, Awaitable, Callable
 
 T = TypeVar('T')
 
@@ -30,14 +30,14 @@ class RateLimiter:
             await x
             self._rate_limited_queue.task_done()
 
-    async def execute(self, x: Awaitable[T]) -> T:
+    async def execute(self, x: Callable[[], Awaitable[T]]) -> T:
         future = asyncio.Future()
 
         async def wrapper():
             retry = 0
             while True:
                 try:
-                    future.set_result(await x)
+                    future.set_result(await x())
                     break
                 except RateLimitExceedException:
                     retry += 1

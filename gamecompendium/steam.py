@@ -1,7 +1,9 @@
 import asyncio
 import json
-from io import TextIOWrapper
+import sys
+import traceback
 from pathlib import Path
+from typing import TextIO, Optional
 
 import aiohttp
 import gzip
@@ -21,6 +23,7 @@ STORAGE_NAME = 'steam'
 
 # Steam says 100'000 a day, but it seems to use much lower limits
 REQUESTS_PER_MINUTE = 40
+DUMP_LIST_PATH = 'dumps/steam_list.json'
 DUMP_PATH = 'dumps/steam.dump'
 DUMP_KEEP_KEYS = {'type', 'name', 'steam_appid', 'required_age', 'is_free', 'detailed_description', 'about_the_game',
                   'short_description', 'supported_languages', 'website', 'developers', 'price_overview',
@@ -56,12 +59,28 @@ async def dump_steam():
     want to hit them,
     """
 
+    async def load_list() -> list[int]:
+        path = Path(DUMP_LIST_PATH)
+        if path.is_file():
+            with path.open('rt') as fd:
+                return json.load(fd)
+        else:
+            data = await limiter.execute(
+                lambda: load_json(session, 'https://api.steampowered.com/ISteamApps/GetAppList/v0002'))
+            games = data['applist']['apps']
+            # Format: list[{"appid": str, "name": str}]
+            games = [g['appid'] for g in games]
+            with path.open('wt') as fd:
+                json.dump(games, fd)
+            return games
+
     async def load_game(appid: int):
         try:
-            details = await limiter.execute(load_json(session, 'https://store.steampowered.com/api/appdetails', {'appids': appid}))
+            details = await limiter.execute(lambda: load_json(session, 'https://store.steampowered.com/api/appdetails', {'appids': appid}))
             data = details[str(appid)]
             if not data['success']:
                 # We don't have permission probably
+                fd.write(json.dumps({'steam_appid': appid, 'failed': True}) + '\n')
                 return
             unfiltered = data['data']  # Unwrap
             # Filter unwanted keys
@@ -71,31 +90,57 @@ async def dump_steam():
         finally:
             progress.update(1)
 
+    print("Dumping all steam data (only required once)")
+    dump_path = Path(DUMP_PATH)
+
     async with aiohttp.ClientSession() as session, \
             RateLimiter(REQUESTS_PER_MINUTE / 60, 2) as limiter:
-        # Format: list[{"appid": str, "name": str}]
-        games = (await limiter.execute(load_json(session, 'http://api.steampowered.com/ISteamApps/GetAppList/v0002'))
-                 )['applist']['apps']
+        all_games = set(await load_list())
+        # Get completed games
+        completed_games = set()
+        try:
+            with gzip.open(dump_path, 'rt') as fd:
+                completed_games = set([json.loads(line.strip())['steam_appid'] for line in fd])
+        except FileNotFoundError:
+            pass
+        except Exception:
+            traceback.print_exc()
 
-        print("Dumping all steam data (only required once)")
-        dump_path = Path(DUMP_PATH)
+        games = list(all_games - completed_games)
+
         dump_path.parent.mkdir(parents=True, exist_ok=True)
-        with gzip.open(dump_path, 'wt') as fd, tqdm(total=len(games)) as progress:
+        with gzip.open(dump_path, 'at') as fd, \
+                tqdm(total=len(all_games), initial=len(completed_games), dynamic_ncols=True) as progress:
             BATCH_SIZE = 1000
             # Make requests in batches so that we don't fill RAM with futures
             for i in range(0, len(games), BATCH_SIZE):
                 batch = games[i:i + BATCH_SIZE]
                 await asyncio.gather(*[
-                    soft_log_exceptions(load_game(g['appid'])) for g in batch
+                    soft_log_exceptions(load_game(g)) for g in batch
                 ])
 
 
-async def require_dump() -> TextIOWrapper:
-    path = Path(DUMP_PATH)
-    if not path.is_file():
-        await dump_steam()
+async def require_dump() -> TextIO:
+    # Comment the next line to skip the dump check/completion
+    await dump_steam()
 
     return gzip.open(DUMP_PATH, 'rt')
+
+
+def parse_date(date: dict) -> Optional[datetime.datetime]:
+    if date['coming_soon'] or date['date'] == '':
+        return None
+    raw_date = date['date']
+    # Format example: '10 Oct, 2007' (but also 'Aug 12, 2015'!)
+    POSSIBLE_FORMATS = ['%d %b, %Y', '%b %d, %Y']
+    for fs in POSSIBLE_FORMATS:
+        try:
+            return datetime.datetime.strptime(raw_date, fs)
+        except ValueError:
+            pass
+    # No format matched
+    print(f"Cannot parse date {json.dumps(date)}", file=sys.stderr)
+    return None
 
 
 async def init_index(storage: Storage) -> Index:
@@ -111,16 +156,14 @@ async def init_index(storage: Storage) -> Index:
 
                 game = json.loads(line)
 
+                if game.get('failed', False):
+                    continue
+
+                game_date = parse_date(game['release_date'])
                 genres_list = [g['description'] for g in game.get('genres', [])]
 
                 dev_list = game['developers']
                 # dev_list.extend(data['publishers'])
-
-                if game['release_date']['coming_soon']:
-                    game_date = None
-                else:
-                    # Format example: '10 Oct, 2007'
-                    game_date = datetime.datetime.strptime(game['release_date']['date'], '%d %b, %Y')
 
                 writer.add_document(
                     id=str(game['steam_appid']),

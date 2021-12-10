@@ -97,7 +97,7 @@ async def extract_games(queue: asyncio.Queue[IgdmGameExtract], count: Callable[[
         QUERY = f'fields name, storyline, summary, genres.name, platforms.name, involved_companies.company.name, '\
                 f'involved_companies.developer, release_dates.date; limit {MAX_LIMIT};'
         real_query = QUERY + f'offset {offset};' + add_filter
-        games = await limiter.execute(load_json(session, 'games', real_query))  # type: List[Dict]
+        games = await limiter.execute(lambda: load_json(session, 'games', real_query))  # type: List[Dict]
 
         for game in games:
 
@@ -124,7 +124,7 @@ async def extract_games(queue: asyncio.Queue[IgdmGameExtract], count: Callable[[
             await queue.put(data)
 
     async with aiohttp.ClientSession() as session, RateLimiter(REQUESTS_PER_SECOND, MAX_OPEN_QUERIES) as limiter:
-        games_count = (await limiter.execute(load_json(session, 'games/count', 'fields *;' + add_filter)))['count']
+        games_count = (await limiter.execute(lambda: load_json(session, 'games/count', 'fields *;' + add_filter)))['count']
         count(games_count)
 
         await asyncio.gather(*[
