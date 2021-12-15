@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TextIO, Optional
 
 import aiohttp
+import dateparser
 import gzip
 from tqdm import tqdm
 
@@ -15,8 +16,10 @@ from whoosh.filedb.filestore import Storage
 from whoosh.index import Index
 from whoosh.qparser import MultifieldParser
 import datetime
+
 from analyzers import keep_numbers_analyzer
 from async_utils import soft_log_exceptions
+from config import config
 from rate_limiter import RateLimiter, RateLimitExceedException
 
 STORAGE_NAME = 'steam'
@@ -30,6 +33,9 @@ DUMP_KEEP_KEYS = {'type', 'name', 'steam_appid', 'required_age', 'is_free', 'det
                   'platforms', 'metacritic', 'categories', 'genres', 'recommendations', 'release_date',
                   'content_descriptors'}
 
+ONLY_KNOWN_GAMES = not config['download_full']
+# Number of reccomendations required to be a 'known game'
+ONLY_KNOWN_GAMES_CUTOFF = 1000
 
 schema = Schema(
     id=fields.ID(stored=True, unique=True),
@@ -74,19 +80,33 @@ async def dump_steam():
                 json.dump(games, fd)
             return games
 
+    def file_add(data: dict):
+        fd.write(json.dumps(data) + '\n')
+
     async def load_game(appid: int):
         try:
-            details = await limiter.execute(lambda: load_json(session, 'https://store.steampowered.com/api/appdetails', {'appids': appid}))
+            try:
+                details = await limiter.execute(lambda: load_json(session, 'https://store.steampowered.com/api/appdetails', {'appids': appid}))
+            except json.decoder.JSONDecodeError:
+                # Invalid json file returned
+                file_add({'steam_appid': appid, 'failed': True})
+                return
             data = details[str(appid)]
             if not data['success']:
                 # We don't have permission probably
-                fd.write(json.dumps({'steam_appid': appid, 'failed': True}) + '\n')
+                file_add({'steam_appid': appid, 'failed': True})
                 return
             unfiltered = data['data']  # Unwrap
+            if appid != unfiltered['steam_appid']:
+                # Redirected entry
+                file_add({'steam_appid': appid, 'failed': True, 'redirect': unfiltered['steam_appid']})
+                # Only save the redirected game if it's not in games
+                if appid in games:
+                    return
+
             # Filter unwanted keys
             filtered = {k: v for k, v in unfiltered.items() if k in DUMP_KEEP_KEYS}
-
-            fd.write(json.dumps(filtered, check_circular=False) + '\n')
+            file_add(filtered)
         finally:
             progress.update(1)
 
@@ -118,63 +138,74 @@ async def dump_steam():
                 await asyncio.gather(*[
                     soft_log_exceptions(load_game(g)) for g in batch
                 ])
+    return len(all_games)
 
 
-async def require_dump() -> TextIO:
-    # Comment the next line to skip the dump check/completion
-    await dump_steam()
+async def require_dump() -> (int, TextIO):
+    # Replace the next line with some game count estimate
+    # to skip the dump check/completion
+    count = await dump_steam()
 
-    return gzip.open(DUMP_PATH, 'rt')
+    return (count, gzip.open(DUMP_PATH, 'rt'))
 
 
 def parse_date(date: dict) -> Optional[datetime.datetime]:
     if date['coming_soon'] or date['date'] == '':
         return None
     raw_date = date['date']
-    # Format example: '10 Oct, 2007' (but also 'Aug 12, 2015'!)
-    POSSIBLE_FORMATS = ['%d %b, %Y', '%b %d, %Y']
-    for fs in POSSIBLE_FORMATS:
-        try:
-            return datetime.datetime.strptime(raw_date, fs)
-        except ValueError:
-            pass
-    # No format matched
+    try:
+        return dateparser.parse(raw_date)
+    except:
+        pass
     print(f"Cannot parse date {json.dumps(date)}", file=sys.stderr)
     return None
 
+def index_games(gamedb: TextIO, gamecount: int, writer):
+    with tqdm(total=gamecount) as progress:
+        games = set()
+        for line in gamedb:
+            progress.update(1)
+            line = line.strip()
+            if line == "":
+                continue
+
+            game = json.loads(line)
+
+            if game.get('failed', False) or game.get('type', 'unknown') not in ['game', 'dlc']:
+                continue
+            if game['steam_appid'] in games:
+                continue
+            if ONLY_KNOWN_GAMES and game.get('recommendations', {}).get('total', 0) < ONLY_KNOWN_GAMES_CUTOFF:
+                continue
+            games.add(game['steam_appid'])
+
+            game_date = parse_date(game['release_date'])
+            genres_list = [g['description'] for g in game.get('genres', [])]
+
+            dev_list = game.get('developers', [])
+            # dev_list.extend(data['publishers'])
+
+            writer.add_document(
+                id=str(game['steam_appid']),
+                name=game['name'],
+                genres=','.join(genres_list),
+                platforms=','.join(game['platforms']),
+                dev_companies=','.join(dev_list),
+                release_date=game_date,
+                storyline=game['detailed_description'],
+                summary=game['about_the_game']
+            )
 
 async def init_index(storage: Storage) -> Index:
     if not storage.index_exists(STORAGE_NAME):
         print("STEAM index not found, creating!")
 
         index = storage.create_index(schema, indexname=STORAGE_NAME)
-        with index.writer() as writer, await require_dump() as fd:
-            for line in fd:
-                line = line.strip()
-                if line == "":
-                    continue
-
-                game = json.loads(line)
-
-                if game.get('failed', False):
-                    continue
-
-                game_date = parse_date(game['release_date'])
-                genres_list = [g['description'] for g in game.get('genres', [])]
-
-                dev_list = game['developers']
-                # dev_list.extend(data['publishers'])
-
-                writer.add_document(
-                    id=str(game['steam_appid']),
-                    name=game['name'],
-                    genres=','.join(genres_list),
-                    platforms=','.join(game['platforms']),
-                    dev_companies=','.join(dev_list),
-                    release_date=game_date,
-                    storyline=game['detailed_description'],
-                    summary=game['about_the_game']
-                )
+        count, fd = await require_dump()
+        with fd, index.writer() as writer:
+            index_games(fd, count, writer)
+            print("Indexing...")
+        print("Ready!")
     else:
         index = storage.open_index(STORAGE_NAME, schema)
 
