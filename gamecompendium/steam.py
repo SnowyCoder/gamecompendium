@@ -17,10 +17,13 @@ from whoosh.index import Index
 from whoosh.qparser import MultifieldParser
 import datetime
 
+from whoosh.writing import IndexWriter
+
 from analyzers import keep_numbers_analyzer
 from async_utils import soft_log_exceptions
 from config import config
 from rate_limiter import RateLimiter, RateLimitExceedException
+from resolver import EntityResolver
 
 STORAGE_NAME = 'steam'
 
@@ -39,6 +42,7 @@ ONLY_KNOWN_GAMES_CUTOFF = 1000
 
 schema = Schema(
     id=fields.ID(stored=True, unique=True),
+    uuid=fields.ID(stored=True, unique=True),
     name=fields.TEXT(stored=True, analyzer=keep_numbers_analyzer()),
     storyline=fields.TEXT(stored=True),
     summary=fields.TEXT(stored=True),
@@ -146,7 +150,7 @@ async def require_dump() -> (int, TextIO):
     # to skip the dump check/completion
     count = await dump_steam()
 
-    return (count, gzip.open(DUMP_PATH, 'rt'))
+    return count, gzip.open(DUMP_PATH, 'rt')
 
 
 def parse_date(date: dict) -> Optional[datetime.datetime]:
@@ -154,13 +158,15 @@ def parse_date(date: dict) -> Optional[datetime.datetime]:
         return None
     raw_date = date['date']
     try:
-        return dateparser.parse(raw_date)
+        date = dateparser.parse(raw_date)
     except:
-        pass
-    print(f"Cannot parse date {json.dumps(date)}", file=sys.stderr)
-    return None
+        date = None
+    if date is None:
+        print(f"Cannot parse date {json.dumps(date)}", file=sys.stderr)
+    return date
 
-def index_games(gamedb: TextIO, gamecount: int, writer):
+
+def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: EntityResolver):
     with tqdm(total=gamecount) as progress:
         games = set()
         for line in gamedb:
@@ -184,9 +190,11 @@ def index_games(gamedb: TextIO, gamecount: int, writer):
 
             dev_list = game.get('developers', [])
             # dev_list.extend(data['publishers'])
+            uuid = resolver.compute_id(game['steam_appid'], game['name'], dev_list, game_date)
 
             writer.add_document(
                 id=str(game['steam_appid']),
+                uuid=uuid,
                 name=game['name'],
                 genres=','.join(genres_list),
                 platforms=','.join(game['platforms']),
@@ -196,14 +204,15 @@ def index_games(gamedb: TextIO, gamecount: int, writer):
                 summary=game['about_the_game']
             )
 
-async def init_index(storage: Storage) -> Index:
+
+async def init_index(storage: Storage, resolver: EntityResolver) -> Index:
     if not storage.index_exists(STORAGE_NAME):
         print("STEAM index not found, creating!")
 
         index = storage.create_index(schema, indexname=STORAGE_NAME)
         count, fd = await require_dump()
         with fd, index.writer() as writer:
-            index_games(fd, count, writer)
+            index_games(fd, count, writer, resolver)
             print("Indexing...")
         print("Ready!")
     else:

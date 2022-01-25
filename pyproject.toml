@@ -12,6 +12,7 @@ aiohttp = "^3.8.1"
 toml = "^0.10.2"
 tqdm = "^4.62.3"
 dateparser = "^1.1.0"
+uuid = "^1.30"
 
 [tool.poetry.dev-dependencies]
 
