@@ -93,6 +93,14 @@ twitch_config = config['twitch']
 access = Access(twitch_config['client_id'], twitch_config['client_secret'])
 
 
+def parse_timestamp_opt(ts: Optional[int]) -> Optional[datetime.datetime]:
+    if ts is None:
+        return None
+    if ts >= 0:
+        return datetime.datetime.fromtimestamp(ts)
+    else:
+        return datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=int(ts))
+
 async def load_json(session: aiohttp.ClientSession, url: str, data: str):
     async with session.post(url='https://api.igdb.com/v4/' + url, headers=access.headers(), data=data) as response:
         if not 200 <= response.status < 300:
@@ -188,7 +196,7 @@ async def populate(ix: Index, resolver: EntityResolver):
         while True:
             x = await queue.get()
             if not ONLY_KNOWN_GAMES or x.total_rating_count >= ONLY_KNOWN_GAMES_CUTOFF:
-                release_date = datetime.datetime.fromtimestamp(x.release_date) if x.release_date is not None else None
+                release_date = parse_timestamp_opt(x.release_date)
                 uuid = resolver.compute_id(x.id, x.name, x.dev_companies, release_date)
                 writer.add_document(
                     id=str(x.id),

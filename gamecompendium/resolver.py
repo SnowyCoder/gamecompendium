@@ -53,7 +53,7 @@ class EntityResolver:
 
         return max(data.items(), key=lambda k: k[1], default=[None])[0]
 
-    def compute_id(self, index_id: object, name: str, dev_companies: List[str], release_date: datetime.datetime | None) -> str:
+    def compute_id(self, index_id: object, name: str, dev_companies: List[str], release_date: Optional[datetime.datetime]) -> str:
         if len(self.indexes) == 0:
             self.generated += 1
             gid = uuid4().hex
