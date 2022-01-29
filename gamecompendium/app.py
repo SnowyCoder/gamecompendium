@@ -10,6 +10,9 @@ from resolver import EntityResolver, general_schema
 from igdb import init_index as igdb_init_index
 from steam import init_index as steam_init_index
 
+
+import aggregator
+
 INDEX_DIR = 'indexes'
 
 
@@ -45,7 +48,7 @@ class App:
                 return
             query = qp.parse(query_txt)
             print(f'Query: {query}')
-
+            
             dictel = {}
             # game uuid -> (score, Array<(name, entry)>)
             for name, index in self.indexes.items():
@@ -63,4 +66,13 @@ class App:
                 for name, entry in entries:
                     print(f"{name}\t{entry['name']}\t{entry['dev_companies']}\t{entry.get('release_date')} - Score: {entry.score}")
                 print("---------------------------------------------------------------------")
+                
+            ######### aggregator test here ##############
+            aggregator.aggregate_search(query, [i.searcher() for i in self.indexes.values()], [0], 3)
+            
+            
+            
+            
+            
+            
 
