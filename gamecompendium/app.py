@@ -68,7 +68,7 @@ class App:
                 print("---------------------------------------------------------------------")
                 
             ######### aggregator test here ##############
-            aggregator.aggregate_search(query, [i.searcher() for i in self.indexes.values()], [0], 3)
+            aggregator.aggregate_search(query, self.indexes, [0], 3)
             
             
             

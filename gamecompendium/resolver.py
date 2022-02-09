@@ -18,6 +18,7 @@ general_schema = Schema(
     dev_companies=fields.KEYWORD(stored=True),
     release_date=fields.DATETIME(stored=True),
     summary=fields.TEXT(stored=True),
+    storyline=fields.TEXT(stored=True),
 )
 
 
