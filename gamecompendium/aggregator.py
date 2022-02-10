@@ -1,13 +1,13 @@
-
-from typing import List, Optional
+import math
 
 from whoosh.matching import IntersectionMatcher, ListMatcher
 from whoosh.query import Query
-from whoosh.searching import Searcher
+from whoosh.searching import Searcher, Hit
 from whoosh.index import Index
 import re
 
-def random_access_score(query: Query, searcher: Searcher, uuid: str) -> Optional[tuple]:
+
+def random_access_score(query: Query, searcher: Searcher, uuid: str) -> tuple[int, float]:
     # Yes, I wrote this, but I think it's using arcane magic.
     # Staring too deep into a dinamically-typed codebase does this, be warned.
     # On a serious note, this IS efficient, the first time IntersectionMatcher is called
@@ -20,64 +20,63 @@ def random_access_score(query: Query, searcher: Searcher, uuid: str) -> Optional
             if m.is_active():
                 return m.id(), m.score()
     # necessary in case of no hit for docid
-    return (0,0)
+    return -1, 0
 
 
-def aggregate_search(query: Query, indexes: List[Index], weights: List[int], k: int, limit=100000):
+def aggregate_search(query: Query, indexes: dict[str, Index], k: int, limit=math.inf) -> list[tuple[list[tuple[Hit, str]], float]]:
     # Threshold algorithm
     
     # create searcher,indexname structure for future need to associate index names
-    searchers_idxs = [(idx.searcher(),idxname) for idxname,idx in indexes.items()]
+    searchers_idxs = [(idx.searcher(), idxname) for idxname, idx in indexes.items()]
     
-    results = []
+    results = []  # list[(result, searcher, index_name)]
     for s in searchers_idxs:
         # include searcher too for exclusion in subsequent score calculation from other searchers
         # include index name so every result can be associated with its origin index
-        results.append((s[0].search(query,limit=limit),s[0],s[1]))
+        results.append((s[0].search(query, limit=limit), s[0], s[1]))
    
     topk = []
-    # iterate for max lenght
-    visited = []
-    for i in range( max( [len(res[0]) for res in results] )):
+    # iterate for max length
+    visited = set()
+    for i in range(max([len(res[0]) for res in results])):
         print("\n\n___________________________________________________________________________________________________________________________")
         print(f"Iteration n. {i+1}")
         threshold = 0
         
         # compute one "row" of results at a time, ie: all first results, then all second results
-        for res in results:
-            
-            if i < len(res[0]):
-               
+        for res, searcher, index_name in results:
+            if i < len(res):
+                current_hit = res[i]
+
                 # update threshold
-                threshold += res[0][i].score
+                threshold += current_hit.score
                 
                 # check duplicates
-                if res[0][i]['uuid'] not in visited:
+                if current_hit['uuid'] not in visited:
                     # update visited docs
-                    visited.append(res[0][i]['uuid'])
+                    visited.add(current_hit['uuid'])
                     # initialize top score
                     top_score = 0
                     # initialize list of doc variants
-                    doclist = [(res[0][i],res[2])]
-                    for s in [src for src in searchers_idxs if src[0] != res[1]]:
+                    doclist = [(current_hit, index_name)]  # type: list[tuple[Hit, str]]
+                    for other_searcher, other_name in [src for src in searchers_idxs if src[0] != searcher]:
                         # get doc id and score
-                        doc_found = random_access_score(query,s[0],res[0][i]['uuid'])
+                        found_index, found_score = random_access_score(query, other_searcher, current_hit['uuid'])
+                        if found_index == -1:
+                            continue  # Not present
                         # update score
-                        top_score += doc_found[1]
+                        top_score += found_score
                         # find exact doc and append it
-                        el = s[0].ixreader.stored_fields(doc_found[0])
-                        doclist.append((el,s[1]))
+                        el = other_searcher.ixreader.stored_fields(found_index)
+                        doclist.append((el, other_name))
                     
-                    #insert into topk results
-                    topk.append((doclist, top_score+res[0][i].score))
-                    
-                
-                # check lenght and remove top k with smallest score if needed
+                    # insert into topk results
+                    topk.append((doclist, top_score + current_hit.score))
+
+                # check length and remove top k with smallest score if needed
                 if len(topk) > k:
-                    el = [topk[i] for i in range(len(topk)) if topk[i][1] == min([top_el[1] for top_el in topk]) ][0]
+                    el = min(topk, key=lambda x: x[1])
                     topk.remove(el)
-            
-            
         
         # print process
         itr = 1
@@ -89,12 +88,12 @@ def aggregate_search(query: Query, indexes: List[Index], weights: List[int], k: 
             for list_el in el[0]:
                 # regex filter for html tags
                 summary = list_el[0]['summary'][0:150]
-                summary = re.sub("\<(.*?)\>","",summary)
+                summary = re.sub(r"<(.*?)>", "", summary)  # Remove HTML tags
                 
                 print("------------------------")
                 print(f"{list_el[0]['name']}")
                 print(f"According to {list_el[1]}")
-                #print(f"{list_el[0].score}")
+                # print(f"{list_el[0].score}")  # Used for single-score debugging
                 print(f"\n\"{summary}...\"")
                 print("------------------------\n")
             print(".................")
@@ -104,14 +103,9 @@ def aggregate_search(query: Query, indexes: List[Index], weights: List[int], k: 
         print("___________________________________________________________________________")
         
         # check if threshold smaller than all top-k results and stop iterating in case
-        tsmaller = True
-        for el in topk:
-            if threshold > el[1] :
-                tsmaller = False
-                
-        if tsmaller==True and len(topk) >= k:
+        if len(topk) >= k and all(score >= threshold for hits, score in topk):
             #print("break")
             break
-        
+    return topk
         
 
