@@ -11,6 +11,7 @@ from whoosh.query import And, Or, Term, AndMaybe, Query, DateRange, Phrase, Cons
 
 from uuid import uuid4
 
+import aggregator
 from analyzers import keep_numbers_analyzer
 
 general_schema = Schema(
@@ -38,21 +39,14 @@ class EntityResolver:
         self.conflicts = 0
 
     def _query_best(self, query: Query) -> Optional[Tuple[str, str]]:
-        # TODO: replace with query aggregator
-        if len(self.searchers) == 1:
-            # Little optimization
-            for x in self.searchers[0].search(query, limit=1):
-                return x['uuid'], x['name']
+        # We don't care about searcher names
+        searchers = [(s, '') for s in self.searchers]
+        # k=1 (get only 1 result)
+        res = aggregator.aggregate_search(query, searchers, k=1)
+        if len(res) <= 0:
             return None
-
-        data = {}
-        for searcher in self.searchers:
-            res = searcher.search(query, limit=5)
-            for x in res:
-                uid = x['uuid'], x['name']
-                data[uid] = data.get(uid, 0) + x.score
-
-        return max(data.items(), key=lambda k: k[1], default=[None])[0]
+        hit = res[0].hits[0][0]
+        return hit['uuid'], hit['name']
 
     def compute_id(self, index_id: object, name: str, dev_companies: List[str], release_date: Optional[datetime.datetime]) -> str:
         if len(self.indexes) == 0:

@@ -1,4 +1,5 @@
 import math
+from typing import NamedTuple
 
 from whoosh.matching import IntersectionMatcher, ListMatcher
 from whoosh.query import Query
@@ -23,11 +24,14 @@ def random_access_score(query: Query, searcher: Searcher, uuid: str) -> tuple[in
     return -1, 0
 
 
-def aggregate_search(query: Query, indexes: dict[str, Index], k: int, limit=math.inf) -> list[tuple[list[tuple[Hit, str]], float]]:
+class AggregateHit(NamedTuple):
+    # Hits from various searchers with their searcher name
+    hits: list[tuple[Hit, str]]
+    total_score: float
+
+
+def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k: int, limit=math.inf) -> list[AggregateHit]:
     # Threshold algorithm
-    
-    # create searcher,indexname structure for future need to associate index names
-    searchers_idxs = [(idx.searcher(), idxname) for idxname, idx in indexes.items()]
     
     results = []  # list[(result, searcher, index_name)]
     for s in searchers_idxs:
@@ -71,12 +75,11 @@ def aggregate_search(query: Query, indexes: dict[str, Index], k: int, limit=math
                         doclist.append((el, other_name))
                     
                     # insert into topk results
-                    topk.append((doclist, top_score + current_hit.score))
+                    topk.append(AggregateHit(doclist, top_score + current_hit.score))
 
                 # check length and remove top k with smallest score if needed
                 if len(topk) > k:
-                    el = min(topk, key=lambda x: x[1])
-                    topk.remove(el)
+                    topk.remove(min(topk, key=lambda x: x.total_score))
         
         # print process
         itr = 1
@@ -89,7 +92,7 @@ def aggregate_search(query: Query, indexes: dict[str, Index], k: int, limit=math
                 # regex filter for html tags
                 summary = list_el[0]['summary'][0:150]
                 summary = re.sub(r"<(.*?)>", "", summary)  # Remove HTML tags
-                
+
                 print("------------------------")
                 print(f"{list_el[0]['name']}")
                 print(f"According to {list_el[1]}")
