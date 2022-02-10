@@ -6,6 +6,7 @@ import json
 import os
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Callable
+import re
 
 import aiohttp
 import requests
@@ -198,6 +199,7 @@ async def populate(ix: Index, resolver: EntityResolver):
             if not ONLY_KNOWN_GAMES or x.total_rating_count >= ONLY_KNOWN_GAMES_CUTOFF:
                 release_date = parse_timestamp_opt(x.release_date)
                 uuid = resolver.compute_id(x.id, x.name, x.dev_companies, release_date)
+                
                 writer.add_document(
                     id=str(x.id),
                     uuid=uuid,

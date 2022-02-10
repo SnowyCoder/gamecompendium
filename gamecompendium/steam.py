@@ -16,6 +16,7 @@ from whoosh.filedb.filestore import Storage
 from whoosh.index import Index
 from whoosh.qparser import MultifieldParser
 import datetime
+import re
 
 from whoosh.writing import IndexWriter
 
@@ -192,6 +193,9 @@ def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: E
             # dev_list.extend(data['publishers'])
             uuid = resolver.compute_id(game['steam_appid'], game['name'], dev_list, game_date)
 
+            summary_text = game['about_the_game']
+            summary_text = re.sub(r"<(.*?)>", "", summary_text)  # Remove HTML tags
+            
             writer.add_document(
                 id=str(game['steam_appid']),
                 uuid=uuid,
@@ -201,7 +205,7 @@ def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: E
                 dev_companies=','.join(dev_list),
                 release_date=game_date,
                 storyline=game['detailed_description'],
-                summary=game['about_the_game']
+                summary=summary_text
             )
 
 

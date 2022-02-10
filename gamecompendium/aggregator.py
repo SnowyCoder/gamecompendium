@@ -43,8 +43,8 @@ def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k
     # iterate for max length
     visited = set()
     for i in range(max([len(res[0]) for res in results])):
-        print("\n\n___________________________________________________________________________________________________________________________")
-        print(f"Iteration n. {i+1}")
+        #print("\n\n___________________________________________________________________________________________________________________________")
+        #print(f"Iteration n. {i+1}")
         threshold = 0
         
         # compute one "row" of results at a time, ie: all first results, then all second results
@@ -81,34 +81,13 @@ def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k
                 if len(topk) > k:
                     topk.remove(min(topk, key=lambda x: x.total_score))
         
-        # print process
-        itr = 1
-        for el in topk:
-            print("\n\n\n***********************")
-            print(f"Result n. {itr}: ")
-            print("***********************")
-            itr += 1
-            for list_el in el[0]:
-                # regex filter for html tags
-                summary = list_el[0]['summary'][0:150]
-                summary = re.sub(r"<(.*?)>", "", summary)  # Remove HTML tags
-
-                print("------------------------")
-                print(f"{list_el[0]['name']}")
-                print(f"According to {list_el[1]}")
-                # print(f"{list_el[0].score}")  # Used for single-score debugging
-                print(f"\n\"{summary}...\"")
-                print("------------------------\n")
-            print(".................")
-            print(f"Score {el[1]}")
-            print(".................")
-        print(f"\nthreshold: {threshold}")
-        print("___________________________________________________________________________")
+        
         
         # check if threshold smaller than all top-k results and stop iterating in case
         if len(topk) >= k and all(score >= threshold for hits, score in topk):
             #print("break")
             break
+        
     return topk
         
 
