@@ -43,35 +43,16 @@ class App:
         while True:
             try:
                 query_txt = input(">")
-                query_txt = re.sub(r"\s*1$", "", query_txt)  # Remove HTML tags
+                # Remove "1" from the end of queries, this helps since games are
+                # always stored as "Portal" not "Portal 1"
+                query_txt = re.sub(r"\s*1$", "", query_txt)
             except KeyboardInterrupt:
                 return
             except EOFError:
                 return
             query = qp.parse(query_txt)
             print(f'Query: {query}')
-            
-            """
-            dictel = {}
-            # game uuid -> (score, Array<(name, entry)>)
-            for name, index in self.indexes.items():
-                with index.searcher() as searcher:
-                    res = searcher.search(query, limit=5)
-                    print(f'Found {len(res)} results in {name}:')
-                    for x in res:
-                        res = dictel.setdefault(x['uuid'], [0, []])
-                        res[0] += x.score
-                        res[1].append((name, x))
 
-            for score, entries in sorted(dictel.values(), key=lambda k: k[0], reverse=True):
-                print("---------------------------------------------------------------------")
-                print(f"              Total score: {score}")
-                for name, entry in entries:
-                    print(f"{name}\t{entry['name']}\t{entry['dev_companies']}\t{entry.get('release_date')} - Score: {entry.score}")
-                print("---------------------------------------------------------------------")
-            """
-            
-            ######### aggregator test here ##############
             searchers = [(idx.searcher(), idxname) for idxname, idx in self.indexes.items()]
             topk_results = aggregator.aggregate_search(query, searchers, 5)
             
@@ -83,19 +64,14 @@ class App:
                 print("***********************")
                 itr += 1
                 for list_el in el[0]:
-                    # regex filter for html tags
-                    #summary = list_el[0]['summary'][0:150]
-                    #summary = re.sub(r"<(.*?)>", "", summary)  # Remove HTML tags
-    
                     print("------------------------")
                     print(f"{list_el[0]['name']}")
-                    if list_el[0].get('release_date',"no") != "no":
-                        print(f"Release date: {list_el[0]['release_date']}")
-                    print(f"Developers: {list_el[0]['dev_companies']}")
+                    if list_el[0].get('date', "no") != "no":
+                        print(f"Release date: {list_el[0]['date']}")
+                    print(f"Developers: {list_el[0]['devs']}")
                     print(f"According to {list_el[1]}")
                     # print(f"{list_el[0].score}")  # Used for single-score debugging
                     print(f"\n\"{list_el[0]['summary'][0:150]}...\"")
-                    #print(summary)
                     print("------------------------\n")
                 print(".................")
                 print(f"Score {el[1]}")

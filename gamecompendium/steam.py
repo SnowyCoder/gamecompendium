@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import traceback
+import warnings
 from pathlib import Path
 from typing import TextIO, Optional
 
@@ -38,7 +39,7 @@ DUMP_KEEP_KEYS = {'type', 'name', 'steam_appid', 'required_age', 'is_free', 'det
                   'content_descriptors'}
 
 ONLY_KNOWN_GAMES = not config['download_full']
-# Number of reccomendations required to be a 'known game'
+# Number of recommendations required to be a 'known game'
 ONLY_KNOWN_GAMES_CUTOFF = 1000
 
 schema = Schema(
@@ -49,8 +50,8 @@ schema = Schema(
     summary=fields.TEXT(stored=True),
     genres=fields.KEYWORD(stored=True),
     platforms=fields.KEYWORD(stored=True),
-    dev_companies=fields.KEYWORD(stored=True),
-    release_date=fields.DATETIME(stored=True),
+    devs=fields.KEYWORD(stored=True),
+    date=fields.DATETIME(stored=True),
 )
 
 
@@ -178,6 +179,8 @@ def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: E
 
             game = json.loads(line)
 
+            if game.get('name', '') == '':
+                continue  # Yes, there are lots of games with no name
             if game.get('failed', False) or game.get('type', 'unknown') not in ['game', 'dlc']:
                 continue
             if game['steam_appid'] in games:
@@ -202,8 +205,8 @@ def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: E
                 name=game['name'],
                 genres=','.join(genres_list),
                 platforms=','.join(game['platforms']),
-                dev_companies=','.join(dev_list),
-                release_date=game_date,
+                devs=','.join(dev_list),
+                date=game_date,
                 storyline=game['detailed_description'],
                 summary=summary_text
             )
@@ -240,5 +243,10 @@ async def test(index: Index):
             res = searcher.search(query, limit=5)
             print(f'Found {len(res)} results:')
             for (i, x) in enumerate(res):
-                print(f"{i + 1}. {x['name']} - {x['dev_companies']} {x.get('release_date')}")
+                print(f"{i + 1}. {x['name']} - {x['devs']} {x.get('date')}")
 
+# Fix: disable dateparser warning (https://github.com/scrapinghub/dateparser/issues/1013)
+warnings.filterwarnings(
+    "ignore",
+    message="The localize method is no longer necessary, as this time zone supports the fold attribute",
+)

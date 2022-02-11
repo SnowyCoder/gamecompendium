@@ -4,8 +4,6 @@ from typing import NamedTuple
 from whoosh.matching import IntersectionMatcher, ListMatcher
 from whoosh.query import Query
 from whoosh.searching import Searcher, Hit
-from whoosh.index import Index
-import re
 
 
 def random_access_score(query: Query, searcher: Searcher, uuid: str) -> tuple[int, float]:
@@ -43,8 +41,6 @@ def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k
     # iterate for max length
     visited = set()
     for i in range(max([len(res[0]) for res in results])):
-        #print("\n\n___________________________________________________________________________________________________________________________")
-        #print(f"Iteration n. {i+1}")
         threshold = 0
         
         # compute one "row" of results at a time, ie: all first results, then all second results
@@ -81,11 +77,8 @@ def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k
                 if len(topk) > k:
                     topk.remove(min(topk, key=lambda x: x.total_score))
         
-        
-        
         # check if threshold smaller than all top-k results and stop iterating in case
         if len(topk) >= k and all(score >= threshold for hits, score in topk):
-            #print("break")
             break
         
     return topk

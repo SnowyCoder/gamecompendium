@@ -6,7 +6,6 @@ import json
 import os
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Callable
-import re
 
 import aiohttp
 import requests
@@ -57,8 +56,8 @@ schema = Schema(
     summary=fields.TEXT(stored=True),
     genres=fields.KEYWORD(stored=True),
     platforms=fields.KEYWORD(stored=True),
-    dev_companies=fields.KEYWORD(stored=True),
-    release_date=fields.DATETIME(stored=True),
+    devs=fields.KEYWORD(stored=True),
+    date=fields.DATETIME(stored=True),
 )
 
 
@@ -101,6 +100,7 @@ def parse_timestamp_opt(ts: Optional[int]) -> Optional[datetime.datetime]:
         return datetime.datetime.fromtimestamp(ts)
     else:
         return datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=int(ts))
+
 
 async def load_json(session: aiohttp.ClientSession, url: str, data: str):
     async with session.post(url='https://api.igdb.com/v4/' + url, headers=access.headers(), data=data) as response:
@@ -206,8 +206,8 @@ async def populate(ix: Index, resolver: EntityResolver):
                     name=x.name,
                     genres=','.join(x.genres),
                     platforms=','.join(x.platforms),
-                    dev_companies=','.join(x.dev_companies),
-                    release_date=release_date,
+                    devs=','.join(x.dev_companies),
+                    date=release_date,
                     storyline=x.storyline,
                     summary=x.summary,
                 )
@@ -251,4 +251,4 @@ async def test(index: Index):
             res = searcher.search(query, limit=5)
             print(f'Found {len(res)} results:')
             for (i, x) in enumerate(res):
-                print(f"{i + 1}. {x.score} {x['name']} - {x['dev_companies']} {x.get('release_date')}")
+                print(f"{i + 1}. {x.score} {x['name']} - {x['devs']} {x.get('date')}")
