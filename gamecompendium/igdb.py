@@ -13,7 +13,7 @@ from tqdm import tqdm
 from whoosh import fields
 from whoosh.fields import Schema
 from whoosh.filedb.filestore import Storage
-from whoosh.index import Index
+from whoosh.index import Index, FileIndex
 from whoosh.qparser import MultifieldParser
 
 from async_utils import soft_log_exceptions
@@ -21,6 +21,7 @@ from config import config
 from analyzers import keep_numbers_analyzer
 from rate_limiter import RateLimiter
 from resolver import EntityResolver
+from source import Source
 
 STORAGE_NAME = 'igdb'
 # Downloads less games (faster to index but has only 10% of the games, used for testing)
@@ -155,7 +156,6 @@ async def download_to_dump():
     if os.path.isfile(DUMP_PATH):
         return
 
-    print("Dumping IGDB games (only required once)")
     queue = asyncio.Queue()  # type: asyncio.Queue[IgdmGameExtract]
 
     def set_total(c: int):
@@ -225,30 +225,13 @@ async def populate(ix: Index, resolver: EntityResolver):
         # writer.commit() is already called by writer.__exit__()
 
 
-async def init_index(storage: Storage, resolver: EntityResolver) -> Index:
-    if not storage.index_exists(STORAGE_NAME):
-        print("IGDB index not found, creating!")
-        index = storage.create_index(schema, indexname=STORAGE_NAME)
+class IgdbSource(Source):
+    def __init__(self):
+        self.name = STORAGE_NAME
+        self.schema = schema
+
+    async def scrape(self) -> None:
+        await download_to_dump()
+
+    async def reindex(self, index: FileIndex, resolver: EntityResolver) -> None:
         await populate(index, resolver)
-    else:
-        index = storage.open_index(STORAGE_NAME, schema)
-
-    return index
-
-
-async def test(index: Index):
-    qp = MultifieldParser(('name', 'storyline', 'summary'), schema)
-    with index.searcher() as searcher:
-        while True:
-            try:
-                query_txt = input(">")
-            except KeyboardInterrupt:
-                return
-            except EOFError:
-                return
-
-            query = qp.parse(query_txt)
-            res = searcher.search(query, limit=5)
-            print(f'Found {len(res)} results:')
-            for (i, x) in enumerate(res):
-                print(f"{i + 1}. {x.score} {x['name']} - {x['devs']} {x.get('date')}")

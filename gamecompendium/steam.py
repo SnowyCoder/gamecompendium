@@ -14,7 +14,7 @@ from tqdm import tqdm
 from whoosh import fields
 from whoosh.fields import Schema
 from whoosh.filedb.filestore import Storage
-from whoosh.index import Index
+from whoosh.index import Index, FileIndex
 from whoosh.qparser import MultifieldParser
 import datetime
 import re
@@ -26,6 +26,7 @@ from async_utils import soft_log_exceptions
 from config import config
 from rate_limiter import RateLimiter, RateLimitExceedException
 from resolver import EntityResolver
+from source import Source
 
 STORAGE_NAME = 'steam'
 
@@ -116,7 +117,6 @@ async def dump_steam():
         finally:
             progress.update(1)
 
-    print("Dumping all steam data (only required once)")
     dump_path = Path(DUMP_PATH)
 
     async with aiohttp.ClientSession() as session, \
@@ -133,6 +133,9 @@ async def dump_steam():
             traceback.print_exc()
 
         games = list(all_games - completed_games)
+        if len(games) == 0:
+            return len(all_games)
+        print(f"Downloading: {len(games)} games")
 
         dump_path.parent.mkdir(parents=True, exist_ok=True)
         with gzip.open(dump_path, 'at') as fd, \
@@ -228,22 +231,20 @@ async def init_index(storage: Storage, resolver: EntityResolver) -> Index:
     return index
 
 
-async def test(index: Index):
-    qp = MultifieldParser(('name', 'storyline', 'summary'), schema)
-    with index.searcher() as searcher:
-        while True:
-            try:
-                query_txt = input(">")
-            except KeyboardInterrupt:
-                return
-            except EOFError:
-                return
+class SteamSource(Source):
+    def __init__(self):
+        self.name = STORAGE_NAME
+        self.schema = schema
 
-            query = qp.parse(query_txt)
-            res = searcher.search(query, limit=5)
-            print(f'Found {len(res)} results:')
-            for (i, x) in enumerate(res):
-                print(f"{i + 1}. {x['name']} - {x['devs']} {x.get('date')}")
+    async def scrape(self) -> None:
+        await require_dump()
+
+    async def reindex(self, index: FileIndex, resolver: EntityResolver) -> None:
+        count, fd = await require_dump()
+        with fd, index.writer() as writer:
+            index_games(fd, count, writer, resolver)
+            print("Indexing...")
+
 
 # Fix: disable dateparser warning (https://github.com/scrapinghub/dateparser/issues/1013)
 warnings.filterwarnings(
