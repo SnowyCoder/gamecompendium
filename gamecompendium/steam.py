@@ -15,7 +15,6 @@ from whoosh import fields
 from whoosh.fields import Schema
 from whoosh.filedb.filestore import Storage
 from whoosh.index import Index, FileIndex
-from whoosh.qparser import MultifieldParser
 import datetime
 import re
 
@@ -150,7 +149,7 @@ async def dump_steam():
     return len(all_games)
 
 
-async def require_dump() -> (int, TextIO):
+async def require_dump() -> tuple[int, TextIO]:
     # Replace the next line with some game count estimate
     # to skip the dump check/completion
     count = await dump_steam()

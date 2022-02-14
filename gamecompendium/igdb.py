@@ -12,9 +12,7 @@ import requests
 from tqdm import tqdm
 from whoosh import fields
 from whoosh.fields import Schema
-from whoosh.filedb.filestore import Storage
 from whoosh.index import Index, FileIndex
-from whoosh.qparser import MultifieldParser
 
 from async_utils import soft_log_exceptions
 from config import config

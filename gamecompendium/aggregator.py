@@ -81,6 +81,6 @@ def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k
         if len(topk) >= k and all(score >= threshold for hits, score in topk):
             break
         
-    return topk
+    return sorted(topk, key=lambda x: x.total_score, reverse=True)
         
 

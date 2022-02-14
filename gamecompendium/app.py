@@ -6,6 +6,7 @@ from whoosh.index import Index
 from whoosh.qparser import MultifieldParser
 import re
 
+from benchmark import BenchmarkSuite, BenchmarkResult
 from resolver import EntityResolver, general_schema
 
 from igdb import IgdbSource
@@ -20,6 +21,7 @@ DEFAULT_SOURCES = [
     IgdbSource(),
     SteamSource()
 ]
+
 
 class App:
     sources: Dict[str, Source]
@@ -69,25 +71,40 @@ class App:
             if source.name not in self.indexes:
                 await self._init_index(source, force_reindex=force_reindex)
 
-    def evaluate(self, file: IO):
-        print("beep boop")  # TODO
+    def run_query(self, query_txt: str, k: int = 5) -> list[aggregator.AggregateHit]:
+        # Remove "1" from the end of queries, this helps since games are
+        # always stored as "Portal" not "Portal 1"
+        query_txt = re.sub(r"\s+[1I]$", "", query_txt.strip())
+
+        qp = MultifieldParser(('name', 'storyline', 'summary'), general_schema)
+        query = qp.parse(query_txt)
+
+        searchers = [(idx.searcher(), idxname) for idxname, idx in self.indexes.items()]
+        topk_results = aggregator.aggregate_search(query, searchers, k)
+        return topk_results
+
+    def evaluate(self, suite: BenchmarkSuite) -> list[BenchmarkResult]:
+        res = []
+        for bench in suite.benchmarks:
+            topk = self.run_query(bench.query, 10)
+            data = {(s.source, s.id): s.relevance for s in bench.scores}
+            entries = []
+            for row in topk:
+                relevance = next((d for hit, source in row.hits if (d := data.get((source, hit['id']))) is not None), 0)
+                entries.append(relevance)
+            res.append(BenchmarkResult(bench.query, entries))
+        return res
 
     def prompt(self):
-        qp = MultifieldParser(('name', 'storyline', 'summary'), general_schema)
         while True:
             try:
                 query_txt = input(">")
-                # Remove "1" from the end of queries, this helps since games are
-                # always stored as "Portal" not "Portal 1"
-                query_txt = re.sub(r"\s*1$", "", query_txt)
             except KeyboardInterrupt:
                 return
             except EOFError:
                 return
-            query = qp.parse(query_txt)
 
-            searchers = [(idx.searcher(), idxname) for idxname, idx in self.indexes.items()]
-            topk_results = aggregator.aggregate_search(query, searchers, 5)
+            topk_results = self.run_query(query_txt)
             
             # print process
             for itr, el in enumerate(topk_results):

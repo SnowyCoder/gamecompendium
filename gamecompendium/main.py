@@ -1,10 +1,6 @@
 import asyncio
-import os
-from whoosh.filedb.filestore import FileStorage
-
-import steam
 from app import App, DEFAULT_SOURCES
-from resolver import EntityResolver
+from benchmark import parse_suite
 import argparse
 
 INDEX_DIR = 'indexes'
@@ -46,20 +42,13 @@ async def main():
         await app.init()
         app.prompt()
     elif args.action == 'evaluate':
-        app.evaluate(args.file)
+        await app.init()
+        with args.file as fd:
+            suite = parse_suite(fd)
+        res = app.evaluate(suite)
+        print(res)
     else:
         print("Unknown action: " + args.action)
-
-
-async def main_test():
-    if not os.path.exists(INDEX_DIR):
-        os.mkdir(INDEX_DIR)
-    storage = FileStorage(INDEX_DIR)
-
-    #igdbIndex = await igdb.init_index(storage, EntityResolver())
-    #await igdb.test(index)
-    steamIndex = await steam.init_index(storage, EntityResolver())
-    await steam.test(steamIndex)
 
 
 if __name__ == '__main__':
