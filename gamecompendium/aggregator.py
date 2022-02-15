@@ -1,8 +1,8 @@
 import math
 from typing import NamedTuple
 
-from whoosh.matching import IntersectionMatcher, ListMatcher, AndMaybeMatcher
-from whoosh.query import Query, AndMaybe
+from whoosh.matching import ListMatcher, AndMaybeMatcher
+from whoosh.query import Query
 from whoosh.searching import Searcher, Hit
 
 
@@ -49,16 +49,18 @@ def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k
                 current_hit = res[i]
 
                 # update threshold
-                threshold += current_hit.score
+                threshold = max(threshold, current_hit.score)
                 
                 # check duplicates
                 if current_hit['uuid'] not in visited:
                     # update visited docs
                     visited.add(current_hit['uuid'])
                     # initialize top score
-                    top_score = 0
+                    top_score = current_hit.score
                     # initialize list of doc variants
                     doclist = [(current_hit, index_name)]  # type: list[tuple[Hit, str]]
+                    index_count = 1
+
                     for other_searcher, other_name in [src for src in searchers_idxs if src[0] != searcher]:
                         # get doc id and score
                         found_index, found_score = random_access_score(query, other_searcher, current_hit['uuid'])
@@ -66,12 +68,13 @@ def aggregate_search(query: Query, searchers_idxs: list[tuple[Searcher, str]], k
                             continue  # Not present
                         # update score
                         top_score += found_score
+                        index_count += 1
                         # find exact doc and append it
                         el = other_searcher.ixreader.stored_fields(found_index)
                         doclist.append((el, other_name))
                     
                     # insert into topk results
-                    topk.append(AggregateHit(doclist, top_score + current_hit.score))
+                    topk.append(AggregateHit(doclist, top_score / index_count))
 
                 # check length and remove top k with smallest score if needed
                 if len(topk) > k:
