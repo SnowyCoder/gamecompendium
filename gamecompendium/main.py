@@ -16,8 +16,9 @@ async def main():
     parser.set_defaults(action='prompt')
     subparsers = parser.add_subparsers()
 
-    subparsers.add_parser('scrape', help='Only download the required data (will take a while)', parents=[common])\
-        .set_defaults(action='scrape')
+    scrape = subparsers.add_parser('scrape', help='Only download the required data (will take a while)', parents=[common])
+    scrape.set_defaults(action='scrape')
+    scrape.add_argument('--update', help="Update the dumped files with new entries", action='store_const', const=True, default=False)
     index = subparsers.add_parser('index', help='Only index the sources', parents=[common])
     index.set_defaults(action='index')
     index.add_argument('--force', '-f', help="Force a reindexing of the sources", action='store_const', const=True, default=False)
@@ -35,7 +36,7 @@ async def main():
         app.add_source(next(x for x in DEFAULT_SOURCES if x.name == args.only))
 
     if args.action == 'scrape':
-        await app.scrape()
+        await app.scrape(update=args.update)
     elif args.action == 'index':
         await app.init(force_reindex=args.force)
     elif args.action == 'prompt':

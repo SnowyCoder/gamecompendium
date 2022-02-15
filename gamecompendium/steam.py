@@ -65,7 +65,7 @@ async def load_json(session: aiohttp.ClientSession, url: str, params: dict = Non
         return json.loads(await response.read())
 
 
-async def dump_steam():
+async def dump_steam(update: bool = False):
     """
     Dumps the steam API into a gzipped file, this is required since Steam has strict API limits and we don't
     want to hit them,
@@ -73,7 +73,7 @@ async def dump_steam():
 
     async def load_list() -> list[int]:
         path = Path(DUMP_LIST_PATH)
-        if path.is_file():
+        if not update and path.is_file():
             with path.open('rt') as fd:
                 return json.load(fd)
         else:
@@ -149,10 +149,10 @@ async def dump_steam():
     return len(all_games)
 
 
-async def require_dump() -> tuple[int, TextIO]:
+async def require_dump(update: bool) -> tuple[int, TextIO]:
     # Replace the next line with some game count estimate
     # to skip the dump check/completion
-    count = await dump_steam()
+    count = await dump_steam(update)
 
     return count, gzip.open(DUMP_PATH, 'rt')
 
@@ -219,7 +219,7 @@ async def init_index(storage: Storage, resolver: EntityResolver) -> Index:
         print("STEAM index not found, creating!")
 
         index = storage.create_index(schema, indexname=STORAGE_NAME)
-        count, fd = await require_dump()
+        count, fd = await require_dump(False)
         with fd, index.writer() as writer:
             index_games(fd, count, writer, resolver)
             print("Indexing...")
@@ -235,11 +235,11 @@ class SteamSource(Source):
         self.name = STORAGE_NAME
         self.schema = schema
 
-    async def scrape(self) -> None:
-        await require_dump()
+    async def scrape(self, update: bool) -> None:
+        await require_dump(update)
 
     async def reindex(self, index: FileIndex, resolver: EntityResolver) -> None:
-        count, fd = await require_dump()
+        count, fd = await require_dump(False)
         with fd, index.writer() as writer:
             index_games(fd, count, writer, resolver)
             print("Indexing...")

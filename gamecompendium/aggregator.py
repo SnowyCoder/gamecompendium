@@ -1,8 +1,8 @@
 import math
 from typing import NamedTuple
 
-from whoosh.matching import IntersectionMatcher, ListMatcher
-from whoosh.query import Query
+from whoosh.matching import IntersectionMatcher, ListMatcher, AndMaybeMatcher
+from whoosh.query import Query, AndMaybe
 from whoosh.searching import Searcher, Hit
 
 
@@ -15,7 +15,7 @@ def random_access_score(query: Query, searcher: Searcher, uuid: str) -> tuple[in
     if docid:
         for subsearcher, offset in searcher.leaf_searchers():
             m = query.matcher(subsearcher, context=searcher.context())
-            m = IntersectionMatcher(ListMatcher([docid], [0]), m)
+            m = AndMaybeMatcher(ListMatcher([docid], [0]), m)
             if m.is_active():
                 return m.id(), m.score()
     # necessary in case of no hit for docid

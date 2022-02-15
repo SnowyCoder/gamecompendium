@@ -150,8 +150,8 @@ async def download_games(queue: asyncio.Queue[IgdmGameExtract], count: Callable[
         ])
 
 
-async def download_to_dump():
-    if os.path.isfile(DUMP_PATH):
+async def download_to_dump(update: bool = False):
+    if not update and os.path.isfile(DUMP_PATH):
         return
 
     queue = asyncio.Queue()  # type: asyncio.Queue[IgdmGameExtract]
@@ -228,8 +228,8 @@ class IgdbSource(Source):
         self.name = STORAGE_NAME
         self.schema = schema
 
-    async def scrape(self) -> None:
-        await download_to_dump()
+    async def scrape(self, update: bool) -> None:
+        await download_to_dump(update)
 
     async def reindex(self, index: FileIndex, resolver: EntityResolver) -> None:
         await populate(index, resolver)

@@ -12,7 +12,7 @@ class Source(Protocol):
     """Schema of the IR system"""
     schema: Schema
 
-    async def scrape(self) -> None:
+    async def scrape(self, update: bool) -> None:
         """Download the data and store it for later"""
 
     async def reindex(self, index: FileIndex, resolver: EntityResolver) -> None:

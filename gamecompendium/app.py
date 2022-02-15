@@ -1,10 +1,12 @@
 import os
-from typing import Dict, IO
+from typing import Dict, Optional
 
 from whoosh.filedb.filestore import Storage, FileStorage
 from whoosh.index import Index
-from whoosh.qparser import MultifieldParser
+from whoosh.qparser import MultifieldParser, syntax
 import re
+
+from whoosh.searching import Searcher
 
 from benchmark import BenchmarkSuite, BenchmarkResult
 from resolver import EntityResolver, general_schema
@@ -27,6 +29,7 @@ class App:
     sources: Dict[str, Source]
     indexes: Dict[str, Index]
     storage: Storage
+    _searchers: list[tuple[Searcher, str]]
 
     def __init__(self):
         self.sources = {}
@@ -34,6 +37,7 @@ class App:
         if not os.path.exists(INDEX_DIR):
             os.mkdir(INDEX_DIR)
         self.storage = FileStorage(INDEX_DIR)
+        self._searchers = []
 
     def add_source(self, source: Source):
         self.sources[source.name] = source
@@ -56,30 +60,36 @@ class App:
 
         self.indexes[source.name] = index
 
-    async def scrape(self):
+    async def scrape(self, update: bool):
         for source in self.sources.values():
-            await source.scrape()
+            await source.scrape(update)
 
     async def init(self, force_reindex: bool = False):
         # Open sources that are already indexed
-        for source in self.sources.values():
-            if source.name not in self.indexes:
-                await self._init_index(source, only_if_present=True)
+        if not force_reindex:
+            for source in self.sources.values():
+                if source.name not in self.indexes:
+                    await self._init_index(source, only_if_present=True)
 
         # Open all the other sources (using previous sources as resolvers)
         for source in self.sources.values():
             if source.name not in self.indexes:
                 await self._init_index(source, force_reindex=force_reindex)
 
+    def _require_searchers(self) -> list[tuple[Searcher, str]]:
+        if len(self._searchers) != len(self.sources):
+            self._searchers = [(idx.searcher(), idxname) for idxname, idx in self.indexes.items()]
+        return self._searchers
+
     def run_query(self, query_txt: str, k: int = 5) -> list[aggregator.AggregateHit]:
         # Remove "1" from the end of queries, this helps since games are
         # always stored as "Portal" not "Portal 1"
         query_txt = re.sub(r"\s+[1I]$", "", query_txt.strip())
 
-        qp = MultifieldParser(('name', 'storyline', 'summary'), general_schema)
+        qp = MultifieldParser(('name', 'storyline', 'summary'), general_schema, group=syntax.OrGroup)
         query = qp.parse(query_txt)
 
-        searchers = [(idx.searcher(), idxname) for idxname, idx in self.indexes.items()]
+        searchers = self._require_searchers()
         topk_results = aggregator.aggregate_search(query, searchers, k)
         return topk_results
 
@@ -96,6 +106,8 @@ class App:
         return res
 
     def prompt(self):
+        # Eager searcher initialization (reduces first interaction time)
+        self._require_searchers()
         while True:
             try:
                 query_txt = input(">")
