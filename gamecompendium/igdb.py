@@ -196,7 +196,10 @@ async def populate(ix: Index, resolver: EntityResolver):
             x = await queue.get()
             if not ONLY_KNOWN_GAMES or x.total_rating_count >= ONLY_KNOWN_GAMES_CUTOFF:
                 release_date = parse_timestamp_opt(x.release_date)
-                uuid = resolver.compute_id(x.id, x.name, x.dev_companies, release_date)
+                if previsit:
+                    resolver.compute(x.id, x.name, x.dev_companies, release_date)
+                    return
+                uuid = resolver.get_id(x.id)
                 
                 writer.add_document(
                     id=str(x.id),
@@ -212,7 +215,18 @@ async def populate(ix: Index, resolver: EntityResolver):
             queue.task_done()
             progress.update(1)
 
+    if resolver.needs_previsit():
+        print("Resolving entities...")
+        previsit = True
+        with tqdm(total=total, dynamic_ncols=True) as progress:
+            task = asyncio.create_task(soft_log_exceptions(consumer()))
+            await producer()
+            await queue.join()
+            task.cancel()
+
+    previsit = False
     with ix.writer() as writer:
+        print("Writing to segments...")
         with tqdm(total=total, dynamic_ncols=True) as progress:
             task = asyncio.create_task(soft_log_exceptions(consumer()))
             await producer()

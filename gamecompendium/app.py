@@ -56,7 +56,7 @@ class App:
             print(f"Initializing {source.name} (with {len(self.indexes)} resolvers)")
             index = self.storage.create_index(indexname=source.name, schema=source.schema)
             await source.reindex(index, resolver)
-            print(f"Done, stats: {resolver.reused} reused / {resolver.generated} generated / {resolver.conflicts} conflicts")
+            print(f"Done, stats: {resolver.reused} reused / {resolver.generated} generated")
 
         self.indexes[source.name] = index
 
@@ -131,7 +131,11 @@ class App:
                     print(f"Developers: {hit['devs']}")
                     print(f"According to {source}")
                     # print(f"{list_el[0].score}")  # Used for single-score debugging
-                    print(f"\n\"{hit['summary'][0:150]}...\"")
+                    summary: str = hit.get('summary')
+                    if summary is not None:
+                        if len(summary) > 150:
+                            summary = summary[0:150] + "..."
+                        print(f"\n\"{summary}\"")
                     print("------------------------\n")
                 print(".................")
                 print(f"Score {el.total_score}")

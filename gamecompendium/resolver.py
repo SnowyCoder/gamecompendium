@@ -27,49 +27,72 @@ class EntityResolver:
     def __init__(self, *indexes: Index):
         self.indexes = indexes
         self.searchers = [x.searcher() for x in indexes]
-        self.mapping = dict()  # type: Dict[str, object]
+        # UUID -> id, score
+        self.uuid_to_id = dict()  # type: Dict[str, tuple[object, float]]
+        # id => list[uuid, score]
+        self.id_to_uuids = dict()  # type: Dict[object, list[tuple[str, float]]]
         self.generated = 0
         self.reused = 0
-        self.conflicts = 0
 
     def reset(self):
-        self.mapping.clear()
+        self.uuid_to_id.clear()
+        self.id_to_uuids.clear()
         self.generated = 0
         self.reused = 0
-        self.conflicts = 0
 
-    def _query_best(self, query: Query) -> Optional[Tuple[str, str]]:
+    def _query_best(self, query: Query) -> list[Tuple[str, float]]:
         # We don't care about searcher names
         searchers = [(s, '') for s in self.searchers]
-        # k=1 (get only 1 result)
-        res = aggregator.aggregate_search(query, searchers, k=1)
-        if len(res) <= 0:
-            return None
-        hit = res[0].hits[0][0]
-        return hit['uuid'], hit['name']
+        res = aggregator.aggregate_search(query, searchers, k=5)
+        return [(r.hits[0][0]['uuid'], r.total_score) for r in res]
 
-    def compute_id(self, index_id: object, name: str, dev_companies: List[str], release_date: Optional[datetime.datetime]) -> str:
+    def _backtrack_add_edges(self, cid: object, edges: list[Tuple[str, float]]) -> None:
+        """
+        Adds a node cid to the graph, trying all the edges
+
+        if an edge can override the previous uuid -> id binding it's replaced and the algorithm is
+        executed again to "backtrack" the adds.
+
+        :param cid: id of the node to add (left node)
+        :param edges: list of (uuid, score) (edges to the right nodes)
+        """
+        while True:
+            while len(edges) > 0 and edges[0][1] <= self.uuid_to_id.get(edges[0][0], (None, -1))[1]:
+                edges = edges[1:]
+
+            if len(edges) <= 0:
+                self.id_to_uuids.pop(cid, None)
+                return
+
+            prev_id = self.uuid_to_id.get(edges[0][0], (None,))[0]
+            self.uuid_to_id[edges[0][0]] = (cid, edges[0][1])
+            self.id_to_uuids[cid] = edges
+            cid = prev_id
+            if cid is None:
+                break
+            edges = self.id_to_uuids[cid]
+
+    def needs_previsit(self) -> bool:
+        return len(self.indexes) > 0
+
+    def compute(self, index_id: object, name: str, dev_companies: List[str], release_date: Optional[datetime.datetime]):
         if len(self.indexes) == 0:
-            self.generated += 1
-            gid = uuid4().hex
-            self.mapping[gid] = index_id
-            return gid
+            return
 
-        full_name_parser = ConstantScoreQuery(Phrase('name', [x.lower() for x in name.split(' ') if len(x) > 0]), 100000)
         name_parser = QueryParser('name', general_schema, [])
         name_query = name_parser.parse(name)
 
-        query = Or([full_name_parser, name_query])
+        query = name_query
         if release_date is not None:
             td = datetime.timedelta(weeks=4) / 2
-            year_query = DateRange('date', release_date - td, release_date + td, boost=10)
+            year_query = DateRange('date', release_date - td, release_date + td, boost=0.5)
             query = AndMaybe(
                     query,
                     year_query
             )
 
         if len(dev_companies) > 0:
-            dev_query = And([Term('devs', x) for x in dev_companies], boost=20)
+            dev_query = And([Term('devs', x) for x in dev_companies], boost=2)
             query = AndMaybe(
                 query,
                 dev_query,
@@ -81,21 +104,19 @@ class EntityResolver:
         except ValueError:
             print(f"Whoosh exception on query: {repr(query)} on game {index_id}", file=sys.stderr)
             traceback.print_exc()
-            res = None
-        gid, gname = res if res is not None else (None, None)
-        reused = True
+            res = []
+
+        if name == 'Left 4 Dead':
+            print(repr(query))
+            print(res)
+
+        self._backtrack_add_edges(index_id, res)
+
+    def get_id(self, index_id: object) -> str:
+        gid = self.id_to_uuids.get(index_id, ((None, 0),))[0][0]
         if gid is None:
-            gid = uuid4().hex
             self.generated += 1
-            reused = False
-
-        if gid in self.mapping:
-            # print(f"Conflict - {gid} ({gname}) already assigned to {self.mapping[gid]}, trying to assign to {index_id}")
             gid = uuid4().hex
-            self.conflicts += 1
-            reused = False
-
-        self.reused += reused
-        self.mapping[gid] = index_id
-
+        else:
+            self.reused += 1
         return gid

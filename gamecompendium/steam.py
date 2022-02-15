@@ -13,7 +13,6 @@ from tqdm import tqdm
 
 from whoosh import fields
 from whoosh.fields import Schema
-from whoosh.filedb.filestore import Storage
 from whoosh.index import Index, FileIndex
 import datetime
 import re
@@ -170,14 +169,15 @@ def parse_date(date: dict) -> Optional[datetime.datetime]:
     return date
 
 
-def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: EntityResolver):
+def index_games(gamedb: TextIO, gamecount: int, writer: Optional[IndexWriter], resolver: EntityResolver):
     with tqdm(total=gamecount) as progress:
         games = set()
         for line in gamedb:
-            progress.update(1)
             line = line.strip()
             if line == "":
                 continue
+
+            progress.update(1)
 
             game = json.loads(line)
 
@@ -195,8 +195,11 @@ def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: E
             genres_list = [g['description'] for g in game.get('genres', [])]
 
             dev_list = game.get('developers', [])
-            # dev_list.extend(data['publishers'])
-            uuid = resolver.compute_id(game['steam_appid'], game['name'], dev_list, game_date)
+            if writer is None:
+                # Previsit! Just compute the ids, don't write anything (check EntityResolver for more info)
+                resolver.compute(game['steam_appid'], game['name'], dev_list, game_date)
+                continue
+            uuid = resolver.get_id(game['steam_appid'])
 
             summary_text = game['about_the_game']
             summary_text = re.sub(r"<(.*?)>", "", summary_text)  # Remove HTML tags
@@ -214,20 +217,16 @@ def index_games(gamedb: TextIO, gamecount: int, writer: IndexWriter, resolver: E
             )
 
 
-async def init_index(storage: Storage, resolver: EntityResolver) -> Index:
-    if not storage.index_exists(STORAGE_NAME):
-        print("STEAM index not found, creating!")
-
-        index = storage.create_index(schema, indexname=STORAGE_NAME)
-        count, fd = await require_dump(False)
-        with fd, index.writer() as writer:
-            index_games(fd, count, writer, resolver)
-            print("Indexing...")
-        print("Ready!")
-    else:
-        index = storage.open_index(STORAGE_NAME, schema)
-
-    return index
+async def init_index(index: Index, resolver: EntityResolver) -> None:
+    count, fd = await require_dump(False)
+    with fd, index.writer() as writer:
+        if resolver.needs_previsit():
+            print("Resolving entities...")
+            index_games(fd, count, None, resolver)
+            fd.seek(0)
+        print("Writing to segments...")
+        index_games(fd, count, writer, resolver)
+        print("Indexing...")
 
 
 class SteamSource(Source):
@@ -239,10 +238,7 @@ class SteamSource(Source):
         await require_dump(update)
 
     async def reindex(self, index: FileIndex, resolver: EntityResolver) -> None:
-        count, fd = await require_dump(False)
-        with fd, index.writer() as writer:
-            index_games(fd, count, writer, resolver)
-            print("Indexing...")
+        await init_index(index, resolver)
 
 
 # Fix: disable dateparser warning (https://github.com/scrapinghub/dateparser/issues/1013)
