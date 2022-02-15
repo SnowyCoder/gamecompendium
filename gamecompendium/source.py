@@ -7,10 +7,12 @@ from resolver import EntityResolver
 
 
 class Source(Protocol):
-    """Name of the data source"""
+    """Source of game instances, like Steam or IGDB"""
+
     name: str
-    """Schema of the IR system"""
+    """Name of the data source"""
     schema: Schema
+    """Schema of the IR system"""
 
     async def scrape(self, update: bool) -> None:
         """Download the data and store it for later"""
