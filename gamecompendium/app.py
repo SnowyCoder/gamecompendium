@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Optional
 
+from whoosh_bugs import run as dont_delete_me_im_fixing_whoosh_bugs
 from whoosh.filedb.filestore import Storage, FileStorage
 from whoosh.index import Index
 from whoosh.qparser import MultifieldParser, syntax
@@ -23,6 +24,8 @@ DEFAULT_SOURCES = [
     IgdbSource(),
     SteamSource()
 ]
+
+dont_delete_me_im_fixing_whoosh_bugs()
 
 
 class App:
@@ -141,8 +144,8 @@ class App:
                 print(f"Score {el.total_score}")
                 print(".................")
             print("___________________________________________________________________________")
+
             
             
-            
-            
+
 

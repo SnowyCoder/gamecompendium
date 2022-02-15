@@ -47,7 +47,7 @@ def parse_suite(lines: TextIO) -> BenchmarkSuite:
     for line in lines:
         rown += 1
         line = line.strip()
-        if line == "":
+        if line == "" or line[0] == '#':
             continue
         if match := QUERY_REGEX.fullmatch(line):
             end_query()
