@@ -2,7 +2,8 @@ import asyncio
 from app import App, DEFAULT_SOURCES
 from benchmark import parse_suite
 import argparse
-
+import math
+import collections
 INDEX_DIR = 'indexes'
 
 
@@ -47,7 +48,54 @@ async def main():
         with args.file as fd:
             suite = parse_suite(fd)
         res = app.evaluate(suite)
-        print(res)
+        avg_precisions = []
+        for el in res:
+            
+            print(f"{el}")
+            
+            # DCG
+            val = (el.raw[0]  + sum([(el.raw[i]/math.log(i+1,2)) for i in range(1,len(el.raw))])  )
+            print(f"DCG: {val}")
+            
+            # IDEAL DCG
+            ideal_list = sorted(el.raw,reverse=True)
+            val_ideal = (ideal_list[0]  + sum([(ideal_list[i]/math.log(i+1,2)) for i in range(1,len(ideal_list))])  )
+            
+            print(f"IDEAL DCG: {val_ideal}")
+            print(f"NDCG: {val/val_ideal}")
+            
+            # NATURAL PRECISION
+            natural_pr = {}
+            doc_count = 0
+            tot_rel = sum([1 for elem in el.raw if elem != 0])
+            for i in range(len(el.raw)):
+                if el.raw[i] != 0:
+                    doc_count += 1
+                    precision = doc_count/(i+1)
+                    natural_pr[doc_count/tot_rel] = precision
+            print("Natural precision: ")
+            print(" | ".join([f"{key}:{value}" for key,value in natural_pr.items()]))
+            
+            # STANDARD PRECISION
+            precisions = {}
+            for i in range(len(el.raw)-1,-1,-1):
+                maxval = max([value for key,value in natural_pr.items() if key >= (i/10)])
+                precisions[(i+1)/10] =  maxval
+            ord_prec = collections.OrderedDict(sorted(precisions.items()))
+            print("Standard precision: ")
+            print(" | ".join([f"{key}:{value}" for key,value in ord_prec.items()]))
+            
+            avg_prc = sum(list(natural_pr.values()))/tot_rel
+            print(f"Average non-interpolated precision: {avg_prc}")
+            
+            avg_int_prc = sum(list(precisions.values()))/10
+            avg_precisions.append(avg_int_prc)
+            print(f"Average interpolated precision: {avg_int_prc}")
+            print("\n")
+        
+        mean_avg = sum(avg_precisions)/len(res)
+        print(f"Mean average precision: {mean_avg}")
+            
     else:
         print("Unknown action: " + args.action)
 

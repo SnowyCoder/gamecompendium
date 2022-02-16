@@ -96,7 +96,7 @@ class App:
         # adds custom set boosts to each field in case the user specifically selects one of them with "field:value"
         # some fields are already boosted by default like "name" but an additional boost can be added by specifing it
         p.add_plugin(FieldBoosterPlugin({
-            'name':40, 'devs': 40, 'date':40,'genres':40,'platforms':40
+            'name':40, 'devs':40, 'date':40,'genres':40,'platforms':40
         }))
         return p
 
@@ -107,7 +107,7 @@ class App:
 
         qp = self.create_parser()
         query = qp.parse(query_txt)
-        print(repr(query))
+        #print(repr(query))
         searchers = self._require_searchers()
         topk_results = aggregator.aggregate_search(query, searchers, k)
         return topk_results
@@ -136,11 +136,11 @@ class App:
                 return
 
             topk_results = self.run_query(query_txt)
-            
+            topk_results = sorted(topk_results, key=lambda x: x.total_score)
             # print process
             for itr, el in enumerate(topk_results):
                 print("\n\n\n***********************")
-                print(f"Result n. {itr + 1}: ")
+                print(f"Result n. {len(topk_results) - itr}: ")
                 print("***********************")
                 for hit, source in el.hits:
                     print("------------------------")
