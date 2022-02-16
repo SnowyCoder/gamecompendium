@@ -1,13 +1,12 @@
-import copy
 import os
-from typing import Dict, Optional, Iterable, MutableSequence
+from typing import Dict
 
 from tqdm import tqdm
 
 from whoosh_bugs import run as dont_delete_me_im_fixing_whoosh_bugs
 from whoosh.filedb.filestore import Storage, FileStorage
 from whoosh.index import Index
-from whoosh.qparser import MultifieldParser, syntax, Plugin, QueryParser, MultifieldPlugin
+from whoosh.qparser import syntax, Plugin, QueryParser, MultifieldPlugin
 import re
 
 from whoosh.searching import Searcher
@@ -29,6 +28,7 @@ DEFAULT_SOURCES = [
 ]
 
 dont_delete_me_im_fixing_whoosh_bugs()
+
 
 class App:
     sources: Dict[str, Source]
@@ -123,7 +123,7 @@ class App:
             for row in topk:
                 relevance = next((d for hit, source in row.hits if (d := data.get((source, hit['id']))) is not None), 0)
                 entries.append(relevance)
-            res.append(BenchmarkResult(bench.query, entries))
+            res.append(BenchmarkResult(bench, entries))
         return res
 
     def prompt(self):

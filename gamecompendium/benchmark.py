@@ -24,7 +24,7 @@ class BenchmarkSuite:
 
 @dataclass
 class BenchmarkResult:
-    query: str
+    query: Benchmark
     raw: list[int]
 
 
