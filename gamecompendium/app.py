@@ -2,6 +2,8 @@ import copy
 import os
 from typing import Dict, Optional, Iterable, MutableSequence
 
+from tqdm import tqdm
+
 from whoosh_bugs import run as dont_delete_me_im_fixing_whoosh_bugs
 from whoosh.filedb.filestore import Storage, FileStorage
 from whoosh.index import Index
@@ -114,7 +116,7 @@ class App:
 
     def evaluate(self, suite: BenchmarkSuite) -> list[BenchmarkResult]:
         res = []
-        for bench in suite.benchmarks:
+        for bench in tqdm(suite.benchmarks):
             topk = self.run_query(bench.query, 10)
             data = {(s.source, s.id): s.relevance for s in bench.scores}
             entries = []
