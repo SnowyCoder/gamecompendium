@@ -1,10 +1,11 @@
+import copy
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Iterable, MutableSequence
 
 from whoosh_bugs import run as dont_delete_me_im_fixing_whoosh_bugs
 from whoosh.filedb.filestore import Storage, FileStorage
 from whoosh.index import Index
-from whoosh.qparser import MultifieldParser, syntax
+from whoosh.qparser import MultifieldParser, syntax, Plugin, QueryParser, MultifieldPlugin
 import re
 
 from whoosh.searching import Searcher
@@ -26,7 +27,6 @@ DEFAULT_SOURCES = [
 ]
 
 dont_delete_me_im_fixing_whoosh_bugs()
-
 
 class App:
     sources: Dict[str, Source]
@@ -84,14 +84,30 @@ class App:
             self._searchers = [(idx.searcher(), idxname) for idxname, idx in self.indexes.items()]
         return self._searchers
 
+    def create_parser(self) -> QueryParser:
+        p = QueryParser(None, general_schema, group=syntax.OrGroup)
+        fieldboosts = {
+            'name': 6,
+            'storyline':1,
+            'summary': 1,
+        }
+        mfp = MultifieldPlugin(('name', 'storyline', 'summary'), fieldboosts=fieldboosts)
+        p.add_plugin(mfp)
+        # adds custom set boosts to each field in case the user specifically selects one of them with "field:value"
+        # some fields are already boosted by default like "name" but an additional boost can be added by specifing it
+        p.add_plugin(FieldBoosterPlugin({
+            'name':40, 'devs': 40, 'date':40,'genres':40,'platforms':40
+        }))
+        return p
+
     def run_query(self, query_txt: str, k: int = 5) -> list[aggregator.AggregateHit]:
         # Remove "1" from the end of queries, this helps since games are
         # always stored as "Portal" not "Portal 1"
         query_txt = re.sub(r"\s+[1I]$", "", query_txt.strip())
 
-        qp = MultifieldParser(('name', 'storyline', 'summary'), general_schema, group=syntax.OrGroup)
+        qp = self.create_parser()
         query = qp.parse(query_txt)
-
+        print(repr(query))
         searchers = self._require_searchers()
         topk_results = aggregator.aggregate_search(query, searchers, k)
         return topk_results
@@ -131,6 +147,10 @@ class App:
                     print(f"{hit['name']}")
                     if hit.get('date', "no") != "no":
                         print(f"Release date: {hit['date']}")
+                    if hit.get('genres', "no") != "no":
+                        print(f"Genres: {hit['genres']}")
+                    if hit.get('platforms', "no") != "no":
+                        print(f"Platforms: {hit['platforms']}")
                     print(f"Developers: {hit['devs']}")
                     print(f"According to {source}")
                     # print(f"{list_el[0].score}")  # Used for single-score debugging
@@ -144,8 +164,25 @@ class App:
                 print(f"Score {el.total_score}")
                 print(".................")
             print("___________________________________________________________________________")
-
             
             
+class FieldBoosterPlugin(Plugin):
+    boosts: Dict[str, float]
 
+    def __init__(self, boosts: Dict[str, float]):
+        self.boosts = boosts
+
+    def filters(self, parser):
+        # Run just before MultifieldPlugin (110)
+        return [(self.do_boost, 105)]
+
+    def do_boost(self, parser: QueryParser, group: syntax.GroupNode):
+        for i, node in enumerate(group):
+            if isinstance(node, syntax.GroupNode):
+                # Recurse inside groups
+                group[i] = self.do_boost(parser, node)
+            elif node.has_fieldname and node.fieldname is not None:
+                node.set_boost(node.boost * self.boosts.get(node.fieldname, 1.0))
+        return group
+            
 
