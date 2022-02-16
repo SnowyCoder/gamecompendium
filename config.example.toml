@@ -2,7 +2,9 @@
 # Disable to allow for faster indexing of fewer data (useful for development)
 download_full = true
 
-[twitch]
+# Only useful for data dumping,
+# don't fill this if you don't need to dump the data.
+[twitch] # IGDB needs twitch credentials to access their API
 # https://api-docs.igdb.com/#account-creation
 client_id = "your_client_id"
 client_secret = "your_client_secret"
