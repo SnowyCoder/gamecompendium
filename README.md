@@ -105,7 +105,17 @@ $ python3 gamecompendium/main.py scrape --update
 ```
 
 ### Evaluation
-TODO
+Automatic evaluation is also supported! (whohoo!).
+To use it run
+```bash
+$ python3 gamecompendium/main.py evaluate main.benchmark
+```
+It will run our [main benchmark](main.benchmark) and print results to console
+once it's done.
+
+The code computes: Discounted Cumulative Gain (raw and nrmalized),
+precision (natural and standard), average precision (raw and interpolated) and
+mean average precision.
 
 ## Query Language
 We used the default

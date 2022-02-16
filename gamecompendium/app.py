@@ -136,7 +136,7 @@ class App:
                 return
 
             topk_results = self.run_query(query_txt)
-            topk_results = sorted(topk_results, key=lambda x: x.total_score)
+            topk_results.reverse()
             # print process
             for itr, el in enumerate(topk_results):
                 print("\n\n\n***********************")

@@ -1,7 +1,7 @@
 # Uses 0-3 scoring
 
 # Simple query
-# UN: Find me "portal 2"
+# UIN: Find me "portal 2"
 query portal 2
 3 steam 620     # Portal 2 [valve]
 2 igdb 106227   # Portal 2 - The Final Hours
@@ -9,7 +9,7 @@ query portal 2
 1 igdb 14546    # Portal (for amiga)
 
 # Only present in IGDB
-# UN: Find me "pokemon legends arceus"
+# UIN: Find me "pokemon legends arceus"
 query pokemon legends arceus
 3 igdb 144054   # Original game
 # All pokemon games should be there, too many to count
@@ -17,7 +17,7 @@ query pokemon legends arceus
 1 igdb 135872   # Pokémon: Legends of the Arena
 
 # More complex user needs:
-# UN: I heard that there is a VR-based Half life game
+# UIN: I heard that there is a VR-based Half life game
 query half life vr
 3 igdb 126098   # Half-Life Alyx
 2 igdb 231      # Half-Life 1
@@ -25,8 +25,8 @@ query half life vr
 2 igdb 33308    # The Lab (Valve VR experiment)
 1 igdb 135735   # Half-Life: final hours
 
-# UN: Has valve made a multiplayer FPS?
-query multiplayer first person shooter devs:Valve
+# UIN: Has valve made a multiplayer FPS?
+query summary:(multiplayer first person shooter) devs:Valve
 3 igdb 241      # Counter Strike: Global Offensive
 3 igdb 891      # Team-Fortress 2
 2 igdb 9471     # Half life Deathmatch
@@ -34,7 +34,7 @@ query multiplayer first person shooter devs:Valve
 1 igdb 339      # The Orange Box (includes TF2 and Portal 2)
 
 # Wrong query (the right name is Left *4* Dead 2)
-# UN: Find the name called "left for dead 2"
+# UIN: Find the name called "left for dead 2"
 query left for dead 2
 3 igdb 124      # Left 4 Dead 2
 2 igdb 20416    # Left 4 Dead 2: The Sacrifice (DLC)
@@ -44,7 +44,7 @@ query left for dead 2
 1 igdb 122      # Left 4 Dead 1
 
 # Imprecise query
-# UN: what is the sequel of Portal?
+# UIN: what is the sequel of Portal?
 query portal sequel
 3 steam 620     # Portal 2 [valve]
 2 igdb 106227   # Portal 2 - The Final Hours
@@ -52,24 +52,24 @@ query portal sequel
 1 igdb 14546    # Portal (for amiga)
 
 # Date range query
-# UN: what is the The Banner Saga game released in 2016?
+# UIN: what is the The Banner Saga game released in 2016?
 query the banner saga date:2016
 3 igdb 8288     # The Banner Saga 2 (~2016)
 1 igdb 5508     # The Banner Saga (~2014)
 1 igdb 26940    # The Banner Saga 3 (~2018)
 
-# UN: What is the game that has "philosophical" and "puzzle" near each other in the summary?
+# UIN: What is the game that has "philosophical" and "puzzle" near each other in the summary?
 query summary:"philosophical puzzle"~4
 3 steam 257510  # The Talos Principle ("The Talos Principle is a philosophical first-person puzzle game")
 3 igdb 23373    # The Talos Principle: Deluxe Edition
 
-# UN: what games did valve release? I'm mostly interested in releases from 2013-01-01 to 2017-01-10
+# UIN: what games did valve release? I'm mostly interested in releases from 2013-01-01 to 2017-01-10
 query devs:Valve date:[20130101 TO 20160510]^2
 3 igdb 2963     # Dota 2
 3 igdb 33308    # The Lab (Valve VR experiment)
 3 igdb 16957    # Counter Strike: Nexon studio
 
 # Wildcard queries
-# UN: game that has in the name "space program" and another word that begins with "ke"
+# UIN: game that has in the name "space program" and another word that begins with "ke"
 query name:(ke* space program)
 3 igdb 3102     # Kerbal space program
