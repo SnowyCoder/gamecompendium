@@ -39,8 +39,8 @@ $ vi config.toml
 ```
 If you work with already dumped data you only
 need to configure `download_full` that will select how many games to index.
-If you set it to false only ~10% of the most famous game will be used, allowing for
-faster iteration times.
+If you set it to `false` only ~10% of the most famous games will be used,
+allowing for faster iteration times.
 
 ### Dependencies
 
@@ -50,7 +50,7 @@ Install poetry then run
 ```bash
 $ poetry shell
 ```
-To get a shell within a virtual environment correct for the project
+To get a shell within a virtual environment with the project dependencies
 (the first time will take a minute or two).
 
 ### Running
@@ -82,10 +82,10 @@ options:
 Using `scrape` will only download games and write them to the dumps
 (if they haven't been fully downloaded yet).
 `index` will only index the documents and quit, scraping them only if necessary.
-In all sub-commands (except `evaluate`) `--only {igdb,steam}` can be selected to
+In all sub-commands (except `evaluate`) you can use `--only {igdb,steam}` to
 limit the sources to process.
 
-WARNING: when indexing it's best to NOT limit the sources used since
+WARNING: when indexing it's best NOT to limit the sources used since
 entity resolution only works if all sources are present.
 
 If you only want to query steam games you can run
@@ -93,12 +93,12 @@ If you only want to query steam games you can run
 $ python3 gamecompendium/main.py --only steam
 ```
 
-You can use --force to re-index your documents
+You can use `--force` to re-index your documents
 ```bash
 $ python3 gamecompendium/main.py index --force
 ```
 
-And you can use --update to update your dumps with
+And you can use `--update` to update your dumps with
 new games (old games won't be updated).
 ```bash
 $ python3 gamecompendium/main.py scrape --update
@@ -113,7 +113,7 @@ $ python3 gamecompendium/main.py evaluate main.benchmark
 It will run our [main benchmark](main.benchmark) and print results to console
 once it's done.
 
-The code computes: Discounted Cumulative Gain (raw and nrmalized),
+The code computes: Discounted Cumulative Gain (raw and normalized),
 precision (natural and standard), average precision (raw and interpolated) and
 mean average precision.
 
@@ -167,6 +167,7 @@ more details.
 
 ### Query Aggregation
 #### [go to file](gamecompendium/aggregator.py)
+
 We use a slightly different version of the **Top-k
 Threshold algorithm** (Fagin et al. 2001*) (random access version).
 Since games aren't always in all the sources, we need to change the
@@ -178,10 +179,12 @@ This means that entities do not gain anything from being in multiple sources.
 To make this work efficiently the threshold computation should also be different,
 we can prove mathematically that `threshold = max(cdim1.score, ..., cdiml.score)`,
 is the minimum threshold function for this case, and this is the formula
-that we're using right now (**mathematical proof** in the source code).
+that we're using right now ([**mathematical proof** in the source code](
+gamecompendium/aggregator.py)).
 
 ### Entity Resolution
 #### [go to file](gamecompendium/resolver.py)
+
 Games don't have a "hard" definition as games are only what we (as humans) think
 of them. **We found this "definition" of game similar to the goal of Information
 Retrieval**, we then use the system itself to help us discriminate entities.
